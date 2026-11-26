@@ -18,23 +18,30 @@ http://localhost:8080). No network, no downloads — everything runs from these 
 - **SHIFT / CTRL** throttle up / down
 - **C** chase / cockpit camera · **V** day / dusk · **P** pause · **R** restart
 
-Thread a ring to score 100 points. Finish all 8 for a 500-point bonus plus
-2 points per second left. Three lives — the mountains are not forgiving.
+Thread a ring to score 100 points — and thread it properly: a ring only counts
+when you fly THROUGH the glowing hoop. Climbing over it or slipping past the
+side is a miss, and the ring stays lit until you loop back through it.
+Finish all 8 for a 500-point bonus plus 2 points per second left. Three lives — the mountains are not forgiving.
 Stall (too slow) and the plane sinks; hit terrain and you lose a life and
 respawn at the last ring.
 
 ## What is in the game
 
 - **3D valley** (Three.js, vendored locally): seeded procedural terrain with a
-  carved river valley, pine forest, drifting clouds, a runway with windsock,
-  and 8 numbered glowing rings along the course.
+  carved river valley, rice-field patchwork, dirt road, villages, pine forest,
+  boulders, drifting clouds, a runway with windsock, and 8 numbered glowing
+  rings along the course — each a true gate with a beacon column on the next one.
 - **A real flight model**: throttle, pitch, bank-to-turn, climb speed bleed,
-  stall sink, terrain collision, respawn at the last ring.
+  stall sink, terrain collision, respawn at the last ring. Rings are gates, not
+  checkpoints: only flying through the hoop counts.
 - **A live HUD**: altitude, speed, vertical speed, heading + compass, score,
-  rings, countdown timer, lives, throttle bar — plus a cockpit attitude
-  indicator in cockpit view.
+  rings, countdown timer, lives, throttle bar — plus a next-ring guidance strip
+  (ring number, turn arrow, distance, height to the gate) and a cockpit attitude
+  indicator with live RPM and airspeed in cockpit view.
 - **Two looks**: bright day alpine (default) and dusk ridge — press V to swap.
-- **Procedural sound**: ring chimes, crash thud, engine hum (WebAudio, no files).
+- **Physics-modelled sound**: the engine note is built from crank rpm (firing
+  pulses + propeller blade-pass) with spool lag and a lumpy idle, wind rush
+  that grows with airspeed, ring chimes and a crash thud (WebAudio, no files).
 - **Deterministic screenshots**: `?shot=start|play|cockpit|end&seed=1` freezes
   the game in a readable pose (see `shots.json`).
 

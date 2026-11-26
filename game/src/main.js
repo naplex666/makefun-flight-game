@@ -58,9 +58,14 @@ let timeLeft = COURSE.timeLimitSec;
 let invulnerableUntil = 0;
 let elapsed = 0;
 let framesRendered = 0;
+// Signed distance of the plane to the next ring's plane, previous frame:
+// the gate only counts on a forward crossing (see checkRingGate).
+let prevRingSide = null;
 
 const camTarget = new THREE.Vector3();
 const camLook = new THREE.Vector3();
+// Frame-rate independent damping factor: 1 - exp(-rate * dt).
+const damp = (rate, dt) => 1 - Math.exp(-rate * dt);
 
 function nextRing() { return world.rings.find((r) => !r.passed); }
 
@@ -68,12 +73,9 @@ function resetFlight() {
   flight = createFlight(world.startPos, world.startYaw);
   flight.speed = 45; // rolling takeoff: already above stall speed, no sink into the runway
   invulnerableUntil = elapsed + 3; // grace while the plane lifts off
-  world.rings.forEach((r) => {
-    r.passed = false;
-    r.mesh.material.color.setHex(palette.ring);
-    r.mesh.material.emissive.setHex(palette.ringEmissive);
-    r.mesh.material.emissiveIntensity = 0.9;
-  });
+  world.rings.forEach((r) => { r.passed = false; });
+  world.setActiveRing(0);
+  prevRingSide = null;
   score = 0; ringsPassed = 0; lives = COURSE.lives; timeLeft = COURSE.timeLimitSec;
 }
 
@@ -106,6 +108,7 @@ function respawn() {
   }
   flight.pitch = 0; flight.roll = 0; flight.speed = 42; flight.throttle = 0.6;
   invulnerableUntil = elapsed + 2.5;
+  prevRingSide = null;
 }
 
 function crash() {
@@ -123,11 +126,11 @@ function crash() {
 
 function passRing(ring) {
   ring.passed = true;
-  ring.mesh.material.color.setHex(0x37c978);
-  ring.mesh.material.emissive.setHex(0x1a7a45);
   ringsPassed += 1;
   score += SCORE.ring;
   audio.ringChime();
+  world.setActiveRing(ringsPassed);
+  prevRingSide = null;
   if (ringsPassed >= COURSE.ringCount) {
     score += SCORE.finish + SCORE.ringTimeBonus * Math.floor(timeLeft);
     gameOver('FLIGHT COMPLETE', 'All 8 rings threaded — the mail got through.');
@@ -145,12 +148,9 @@ if (shotMode) {
   score = preset.score; ringsPassed = preset.ringsPassed; timeLeft = preset.timeLeft; lives = preset.lives;
   cameraMode = preset.camera;
   world.rings.forEach((r, i) => {
-    if (i < ringsPassed) {
-      r.passed = true;
-      r.mesh.material.color.setHex(0x37c978);
-      r.mesh.material.emissive.setHex(0x1a7a45);
-    }
+    if (i < ringsPassed) r.passed = true;
   });
+  world.setActiveRing(ringsPassed);
   if (preset.mode === 'title') { state = 'title'; hud.showTitle(); }
   else if (preset.mode === 'gameover') {
     state = 'gameover';
@@ -181,20 +181,69 @@ window.addEventListener('resize', () => {
 
 const clock = new THREE.Clock();
 
+// Ring gates only count when the plane crosses the ring's plane inside the
+// hoop: flying over, under or beside a ring does not score, so the course
+// cannot be cheated by climbing above the gates. A crossing outside the hoop
+// is a miss — the ring stays active and the pilot must loop back through it.
+function checkRingGate() {
+  const ring = nextRing();
+  if (!ring) return;
+  const rx = flight.pos.x - ring.pos.x;
+  const ry = flight.pos.y - ring.pos.y;
+  const rz = flight.pos.z - ring.pos.z;
+  const side = rx * ring.normal.x + ry * ring.normal.y + rz * ring.normal.z;
+  if (prevRingSide !== null && prevRingSide < 0 && side >= 0 && Math.abs(side) < 80) {
+    const px = rx - ring.normal.x * side;
+    const py = ry - ring.normal.y * side;
+    const pz = rz - ring.normal.z * side;
+    const radial = Math.hypot(px, py, pz);
+    if (radial < COURSE.ringRadius - 0.5) {
+      passRing(ring);
+      return; // passRing resets prevRingSide for the next gate
+    }
+    audio.missBuzz();
+    hud.toast(`MISSED RING ${ring.index + 1} — fly through the glowing hoop!`, 2200);
+  }
+  prevRingSide = side;
+}
+
+// Guidance to the next ring for the HUD strip: number, distance, height
+// difference and a turn arrow, so the pilot always knows where the gate is.
+function nextRingGuide() {
+  const ring = nextRing();
+  if (!ring) return null;
+  const dx = ring.pos.x - flight.pos.x;
+  const dy = ring.pos.y - flight.pos.y;
+  const dz = ring.pos.z - flight.pos.z;
+  const bearing = Math.atan2(dx, -dz); // the yaw that points at the ring
+  let rel = bearing - flight.yaw;
+  while (rel > Math.PI) rel -= 2 * Math.PI;
+  while (rel < -Math.PI) rel += 2 * Math.PI;
+  return {
+    index: ring.index + 1,
+    dist: Math.round(Math.hypot(dx, dy, dz)),
+    dy: Math.round(dy),
+    arrow: Math.abs(rel) < 0.26 ? '▲' : rel > 0 ? '▶' : '◀',
+  };
+}
+
 function updateCamera(dt) {
   if (cameraMode === 'cockpit') {
     camTarget.copy(flight.pos).addScaledVector(flight.forward, 2.3);
     camTarget.y += 1.9;
-    camera.position.lerp(camTarget, Math.min(1, 12 * dt));
+    camera.position.lerp(camTarget, damp(12, dt));
     camLook.copy(flight.pos).addScaledVector(flight.forward, 40);
     camLook.y -= 2.2;
     camera.lookAt(camLook);
     return;
   }
+  // Chase camera: damped follow — the camera lags into turns and swings out
+  // on yaw, settling without overshoot, and looks a little ahead along the
+  // flight path (velocity), not just at the nose.
   camTarget.copy(flight.pos).addScaledVector(flight.forward, -15);
   camTarget.y += 4.6;
-  camera.position.lerp(camTarget, Math.min(1, 4.5 * dt));
-  camLook.copy(flight.pos).addScaledVector(flight.forward, 14);
+  camera.position.lerp(camTarget, damp(5, dt));
+  camLook.copy(flight.pos).addScaledVector(flight.forward, 14 + flight.speed * 0.12);
   camLook.y += 1;
   camera.lookAt(camLook);
 }
@@ -234,9 +283,8 @@ function loop() {
     if (events.stalled) hud.warn('STALL! Add throttle.');
     if (events.crashed && elapsed > invulnerableUntil) crash();
 
-    // Ring pass.
-    const ring = nextRing();
-    if (ring && flight.pos.distanceTo(ring.pos) < COURSE.ringRadius + 2) passRing(ring);
+    // Ring pass: only a true threading of the gate counts.
+    checkRingGate();
 
     // Timer.
     timeLeft -= dt;
@@ -256,9 +304,15 @@ function loop() {
 
   applyFlightToMesh(flight, planeMesh, prop, dt, elapsed);
   updateCamera(dt);
+  // The view widens a touch with speed, for a sense of pace.
+  const targetFov = 68 + flight.speed * 0.07;
+  if (Math.abs(camera.fov - targetFov) > 0.05) {
+    camera.fov += (targetFov - camera.fov) * Math.min(1, 2 * dt);
+    camera.updateProjectionMatrix();
+  }
   world.update(dt, elapsed);
-  hud.updateHud(flight, world.heightAt(flight.pos.x, flight.pos.z), score, ringsPassed, COURSE.ringCount, timeLeft, lives);
-  hud.setCockpit(cameraMode === 'cockpit' && state === 'playing', flight.roll, flight.pitch);
+  hud.updateHud(flight, world.heightAt(flight.pos.x, flight.pos.z), score, ringsPassed, COURSE.ringCount, timeLeft, lives, nextRingGuide());
+  hud.setCockpit(cameraMode === 'cockpit' && state === 'playing', flight.roll, flight.pitch, flight.throttle, flight.speed);
   renderer.render(scene, camera);
   framesRendered += 1;
   if (framesRendered === 3) window.__shotReady = true;

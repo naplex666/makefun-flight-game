@@ -4,7 +4,7 @@ const $ = (id) => document.getElementById(id);
 let toastTimer = 0;
 let warnTimer = 0;
 
-export function updateHud(f, ground, score, ringsPassed, ringTotal, timeLeft, lives) {
+export function updateHud(f, ground, score, ringsPassed, ringTotal, timeLeft, lives, guide) {
   const alt = Math.max(0, Math.round(f.pos.y - ground));
   const spd = Math.round(f.speed * 3.6);
   const vs = (f.forward.y * f.speed).toFixed(1);
@@ -23,6 +23,15 @@ export function updateHud(f, ground, score, ringsPassed, ringTotal, timeLeft, li
   $('hud-lives').textContent = String(lives);
   $('hud-thr').textContent = `${Math.round(f.throttle * 100)}%`;
   $('throttle-fill').style.width = `${Math.round(f.throttle * 100)}%`;
+  // Next-gate strip: ring number, turn arrow, distance and height to the gate.
+  const next = $('hud-next');
+  if (guide) {
+    const dy = guide.dy >= 0 ? `▲${guide.dy}m` : `▼${-guide.dy}m`;
+    next.innerHTML = `NEXT RING <b>${guide.index}</b> &nbsp; ${guide.arrow} &nbsp; ${guide.dist}m &nbsp; ${dy}`;
+    next.style.display = 'block';
+  } else {
+    next.style.display = 'none';
+  }
 }
 
 export function toast(msg, ms = 1700) {
@@ -64,10 +73,17 @@ export function showGameOver(title, sub, score, detail) {
   $('gameover').style.display = 'flex';
 }
 
-export function setCockpit(on, roll, pitch) {
+export function setCockpit(on, roll, pitch, throttle, speed) {
   $('cockpit-panel').style.display = on ? 'block' : 'none';
   if (on) {
     const line = $('attitude-line');
     line.style.transform = `translateY(${(-pitch * 46).toFixed(1)}px) rotate(${(-roll * 57.3).toFixed(1)}deg)`;
+    // Live instruments: rpm needle (throttle-driven) and airspeed tape.
+    const rpm = $('cockpit-rpm');
+    if (rpm) rpm.style.width = `${Math.round(25 + throttle * 75)}%`;
+    const rpmPct = $('cockpit-rpm-pct');
+    if (rpmPct) rpmPct.textContent = `${Math.round(700 + throttle * 1900)}`;
+    const spd = $('cockpit-spd');
+    if (spd) spd.textContent = `${Math.round(speed * 3.6)} km/h`;
   }
 }

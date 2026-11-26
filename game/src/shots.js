@@ -18,14 +18,15 @@ function yawFromDir(dx, dz) {
 export function planShot(world, shot) {
   const rings = world.rings;
   if (shot === 'play') {
-    // Mid-course: approaching ring 3, rings 1-2 already threaded.
+    // Mid-course: approaching ring 3, rings 1-2 already threaded. Close enough
+    // that the hoop fills the frame ahead, with fields and village below.
     const target = rings[2];
     const prev = rings[1];
     const dx = target.pos.x - prev.pos.x, dz = target.pos.z - prev.pos.z;
     const len = Math.hypot(dx, dz) || 1;
     return {
       mode: 'playing', camera: 'chase', frozen: true,
-      pos: { x: target.pos.x - (dx / len) * 130, y: target.pos.y + 4, z: target.pos.z - (dz / len) * 130 },
+      pos: { x: target.pos.x - (dx / len) * 95, y: target.pos.y + 2, z: target.pos.z - (dz / len) * 95 },
       yaw: yawFromDir(dx / len, dz / len), pitch: 0.04, roll: -0.18,
       speed: 58, throttle: 0.72, ringsPassed: 2, score: 200, timeLeft: 142, lives: 3,
     };
@@ -38,7 +39,7 @@ export function planShot(world, shot) {
     const len = Math.hypot(dx, dz) || 1;
     return {
       mode: 'playing', camera: 'cockpit', frozen: true,
-      pos: { x: target.pos.x - (dx / len) * 90, y: target.pos.y + 2, z: target.pos.z - (dz / len) * 90 },
+      pos: { x: target.pos.x - (dx / len) * 75, y: target.pos.y + 2, z: target.pos.z - (dz / len) * 75 },
       yaw: yawFromDir(dx / len, dz / len), pitch: 0.02, roll: 0.12,
       speed: 64, throttle: 0.78, ringsPassed: 4, score: 400, timeLeft: 105, lives: 3,
     };
