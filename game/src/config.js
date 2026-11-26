@@ -30,8 +30,8 @@ export const PALETTES = {
   },
   dusk: {
     name: 'dusk',
-    sky: 0x2e3a5e, fog: 0x5a4a6a, fogNear: 300, fogFar: 1400,
-    sunColor: 0xff9a4d, sunIntensity: 2.0, hemiSky: 0x8a6aa8, hemiGround: 0x3a2f28, hemiIntensity: 0.7,
+    sky: 0x2e3a5e, fog: 0x5a4a6a, fogNear: 300, fogFar: 1600,
+    sunColor: 0xff9a4d, sunIntensity: 2.6, hemiSky: 0x9a7ab8, hemiGround: 0x4a3f34, hemiIntensity: 1.0,
     sunPos: [-420, 180, -300],
     valley: 0x3d5a3a, slope: 0x5e5245, rock: 0x6e6258, snow: 0xd8c8d8, snowLine: 100,
     river: 0x2a4a72, tree: 0x22482a, trunk: 0x4a3220, cloud: 0xffc8a0,
