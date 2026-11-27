@@ -4,7 +4,7 @@ const $ = (id) => document.getElementById(id);
 let toastTimer = 0;
 let warnTimer = 0;
 
-export function updateHud(f, ground, score, ringsPassed, ringTotal, timeLeft, lives, guide) {
+export function updateHud(f, ground, score, ringsPassed, ringTotal, timeLeft, lives, guide, fuel, mission) {
   const alt = Math.max(0, Math.round(f.pos.y - ground));
   const spd = Math.round(f.speed * 3.6);
   const vs = (f.forward.y * f.speed).toFixed(1);
@@ -23,6 +23,18 @@ export function updateHud(f, ground, score, ringsPassed, ringTotal, timeLeft, li
   $('hud-lives').textContent = String(lives);
   $('hud-thr').textContent = `${Math.round(f.throttle * 100)}%`;
   $('throttle-fill').style.width = `${Math.round(f.throttle * 100)}%`;
+  // Fuel: the decision gauge — full power drinks it, green gates refill it.
+  if (fuel !== undefined && $('hud-fuel')) {
+    $('hud-fuel').textContent = `${Math.round(fuel)}%`;
+    $('fuel-fill').style.width = `${Math.round(fuel)}%`;
+    $('fuel-fill').style.background = fuel < 25
+      ? 'linear-gradient(90deg, #ff5d5d, #ff7a45)'
+      : 'linear-gradient(90deg, #37c978, #ffd76a)';
+  }
+  // Mission banner: which sortie this is and what it asks for.
+  if (mission && $('hud-mission')) {
+    $('hud-mission').textContent = `MISSION ${mission.index + 1} · ${mission.name}`;
+  }
   // Next-gate strip: ring number, turn arrow, distance and height to the gate.
   const next = $('hud-next');
   if (guide) {

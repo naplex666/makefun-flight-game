@@ -3,7 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Garuda Ridge Run — a mountain courier flight</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='13' fill='none' stroke='%23ffb020' stroke-width='4'/%3E%3C/svg%3E">
+<title>Garuda Ridge Run — a golden canyon courier flight</title>
 <style>
   html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #0b1e33;
     font-family: "Segoe UI", system-ui, -apple-system, sans-serif; color: #eaf4ff; }
@@ -18,6 +19,9 @@
   #hud-bottom { left: 50%; bottom: 12px; transform: translateX(-50%); width: min(520px, 86vw); text-align: center; }
   #throttle-bar { height: 10px; border-radius: 5px; background: rgba(255,255,255,.18); overflow: hidden; margin-top: 4px; }
   #throttle-fill { height: 100%; width: 60%; background: linear-gradient(90deg, #37c978, #ffd76a, #ff7a45); }
+  #fuel-bar { height: 10px; border-radius: 5px; background: rgba(255,255,255,.18); overflow: hidden; margin-top: 4px; }
+  #fuel-fill { height: 100%; width: 100%; background: linear-gradient(90deg, #37c978, #ffd76a); }
+  #hud-mission { display: block; font-size: 12px; letter-spacing: 1px; color: #ffd76a; margin-bottom: 2px; }
   #toast { top: 104px; left: 50%; transform: translateX(-50%); font-size: 26px; font-weight: 800; color: #ffd76a;
     letter-spacing: .5px; opacity: 0; transition: opacity .25s; }
   #warn { top: 144px; left: 50%; transform: translateX(-50%); font-size: 18px; font-weight: 700; color: #ff5d5d;
@@ -41,6 +45,11 @@
   .btn { pointer-events: auto; cursor: pointer; display: inline-block; margin-top: 16px; padding: 12px 34px;
     font-size: 18px; font-weight: 800; color: #10233a; background: #ffd76a; border: none; border-radius: 999px; }
   .btn:hover { background: #ffe08a; }
+  .mission-btn { display: block; width: 100%; margin-top: 10px; padding: 12px 18px; text-align: left;
+    font-size: 16px; font-weight: 800; color: #10233a; background: #ffd76a; border: none; border-radius: 12px;
+    cursor: pointer; pointer-events: auto; }
+  .mission-btn:hover { background: #ffe08a; }
+  .mission-btn small { display: block; font-size: 13px; font-weight: 400; color: #4a3a1a; margin-top: 2px; }
   #gameover { display: none; }
   #cockpit-panel { display: none; left: 50%; bottom: 112px; transform: translateX(-50%); width: 300px;
     text-align: center; font-size: 14px; }
@@ -64,6 +73,7 @@
 <div id="compass" class="hud panel">N &nbsp; <b id="hud-compass">000&deg; N</b> &nbsp; E</div>
 <div id="hud-next" class="hud panel"></div>
 <div id="hud-right" class="hud panel">
+  <span id="hud-mission">MISSION 1 · COURIER RUN</span>
   SCORE <b id="hud-score">0</b><br>
   RINGS <b id="hud-rings">0 / 8</b> &nbsp; TIME <b id="hud-time">3:00</b><br>
   LIVES <b id="hud-lives">3</b>
@@ -73,7 +83,9 @@
 <div id="hud-bottom" class="hud panel">
   THROTTLE <span id="hud-thr">60%</span>
   <div id="throttle-bar"><div id="throttle-fill"></div></div>
-  <div style="font-size:12px; color:#bfe0ff; margin-top:4px">W/S or &uarr;/&darr; pitch &nbsp; A/D bank &amp; turn &nbsp; SHIFT/CTRL throttle &nbsp; C camera &nbsp; V dusk/day &nbsp; P pause</div>
+  FUEL <span id="hud-fuel">100%</span>
+  <div id="fuel-bar"><div id="fuel-fill"></div></div>
+  <div style="font-size:12px; color:#bfe0ff; margin-top:4px">W/S or &uarr;/&darr; pitch &nbsp; A/D bank &amp; turn &nbsp; SHIFT/CTRL throttle &nbsp; C camera &nbsp; V golden/dusk &nbsp; P pause</div>
 </div>
 <div id="cockpit-panel" class="hud panel">
   COCKPIT &mdash; ATTITUDE
@@ -86,12 +98,15 @@
 <div id="title" class="overlay">
   <div class="card">
     <h1>GARUDA RIDGE RUN</h1>
-    <h2>A mountain courier flight &mdash; fly the valley, thread every ring, land the mail.</h2>
-    <p>Fly your bush plane down the Merapi valley. Thread all <b>8 glowing rings</b> before the
-       clock runs out, mind the ridges, and bring her home. Three lives &mdash; the mountains are not forgiving.</p>
+    <h2>A golden canyon courier flight &mdash; three missions, one canyon, fuel is a decision.</h2>
+    <p>Fly your bush plane down the canyon at golden hour. Thread the glowing
+       rings, mind the walls, and watch the tank &mdash; full power drinks it,
+       and only the green gates refill it. Three lives &mdash; the canyon is not forgiving.</p>
+    <button class="mission-btn" data-mission="0">1 &middot; COURIER RUN<small>Thread all 8 rings — the mail gets through.</small></button>
+    <button class="mission-btn" data-mission="1">2 &middot; CANYON DASH<small>Five gates, one hundred seconds — fly it flat out.</small></button>
+    <button class="mission-btn" data-mission="2">3 &middot; FUEL RUN<small>Eight rings on a dry tank — drink from the green gates or glide home.</small></button>
     <p class="keys"><b>W / &uarr;</b> climb &nbsp; <b>S / &darr;</b> dive &nbsp; <b>A / D</b> bank &amp; turn<br>
-       <b>SHIFT / CTRL</b> throttle &nbsp; <b>C</b> chase / cockpit &nbsp; <b>V</b> day / dusk &nbsp; <b>P</b> pause &nbsp; <b>R</b> restart</p>
-    <button class="btn" id="start-btn">TAKE OFF</button>
+       <b>SHIFT / CTRL</b> throttle &nbsp; <b>C</b> chase / cockpit &nbsp; <b>V</b> golden / dusk &nbsp; <b>P</b> pause &nbsp; <b>R</b> restart</p>
     <p style="font-size:12px; color:#9fc6ea; margin-top:14px">A complete original flight game. No network, no downloads &mdash; everything runs from these files.</p>
   </div>
 </div>

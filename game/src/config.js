@@ -1,17 +1,17 @@
-// Game configuration: two candidate palettes (day alpine vs dusk ridge) and the course.
-// The pairwise winner is chosen by comparing their screenshots; the loser stays in-game
-// on the V key so both candidates' work ships.
+// Game configuration: a golden-hour canyon, three missions, fuel.
+// The pairwise winner is chosen by comparing screenshots; the cover frame is
+// the poster, so the default look is golden hour, not bright noon.
 
 export const SEED = 1;
 
 export const COURSE = {
-  // Valley waypoints (x, z) the course snakes through, start to finish.
+  // Canyon waypoints (x, z) the course snakes through, start to finish.
   points: [
     [0, -1050], [60, -900], [-40, -750], [90, -600], [-70, -450],
     [40, -300], [-90, -150], [70, 0], [-50, 150], [80, 300],
     [-60, 450], [30, 600], [-80, 750], [0, 900],
   ],
-  ringHeight: 34, // rings float this far above the valley floor
+  ringHeight: 34, // rings float this far above the canyon floor
   ringRadius: 11,
   ringCount: 8,
   timeLimitSec: 180,
@@ -19,23 +19,31 @@ export const COURSE = {
 };
 
 export const PALETTES = {
-  day: {
-    name: 'day',
-    sky: 0x87bfe8, fog: 0x9fc8e8, fogNear: 350, fogFar: 1600,
-    sunColor: 0xfff2d8, sunIntensity: 2.4, hemiSky: 0xbfe3ff, hemiGround: 0x4a6b3f, hemiIntensity: 0.9,
-    sunPos: [300, 500, 200],
-    valley: 0x4f8f4a, slope: 0x7a7a5e, rock: 0x8d8578, snow: 0xf4f8ff, snowLine: 105,
-    river: 0x2f7fc2, tree: 0x2e6b34, trunk: 0x6b4a2f, cloud: 0xffffff,
-    ring: 0xff8c1a, ringEmissive: 0xff6a00, runway: 0x3a3f45,
+  golden: {
+    name: 'golden',
+    // Sky dome gradient: low sun on the horizon, deep indigo overhead.
+    skyZenith: 0x2e3a6e, skyMid: 0x9a5f74, skyHorizon: 0xffb347,
+    sunDisc: 0xffa030, sunGlow: 0xff9a3c,
+    fog: 0xe8a35c, fogNear: 320, fogFar: 1500,
+    sunColor: 0xffb347, sunIntensity: 3.0, hemiSky: 0x8a6a9a, hemiGround: 0x7a5638, hemiIntensity: 1.05,
+    sunPos: [-500, 280, 450],
+    // Canyon strata: rust, ochre and umber bands over a sandy floor.
+    floor: 0xc9a06a, strataA: 0x9a5a38, strataB: 0xc98a4a, strataC: 0x7a4a2e, rim: 0xd8b890,
+    river: 0xd88a3a, tree: 0x46582c, trunk: 0x4a3220, cloud: 0xffd9b0,
+    ring: 0xffb020, ringEmissive: 0xff8a00, fuelRing: 0x37c978, fuelRingEmissive: 0x1a7a45,
+    runway: 0x3a3230,
   },
   dusk: {
     name: 'dusk',
-    sky: 0x2e3a5e, fog: 0x5a4a6a, fogNear: 300, fogFar: 1600,
+    skyZenith: 0x1a2340, skyMid: 0x5e3a5e, skyHorizon: 0xff7a4d,
+    sunDisc: 0xffc890, sunGlow: 0xff6a2a,
+    fog: 0x5a4a6a, fogNear: 300, fogFar: 1600,
     sunColor: 0xff9a4d, sunIntensity: 2.6, hemiSky: 0x9a7ab8, hemiGround: 0x4a3f34, hemiIntensity: 1.0,
     sunPos: [-420, 180, -300],
-    valley: 0x3d5a3a, slope: 0x5e5245, rock: 0x6e6258, snow: 0xd8c8d8, snowLine: 100,
+    floor: 0x8a6a48, strataA: 0x6e4a34, strataB: 0x8a5a3a, strataC: 0x5e3a26, rim: 0xa8886a,
     river: 0x2a4a72, tree: 0x22482a, trunk: 0x4a3220, cloud: 0xffc8a0,
-    ring: 0xffb020, ringEmissive: 0xff7a00, runway: 0x2e3238,
+    ring: 0xffb020, ringEmissive: 0xff7a00, fuelRing: 0x37c978, fuelRingEmissive: 0x1a7a45,
+    runway: 0x2e3238,
   },
 };
 
@@ -54,4 +62,5 @@ export const SCORE = {
   ringTimeBonus: 2, // per second left when a ring is threaded
   finish: 500,
   crash: -150,
+  fuelGate: 30, // fuel (percent) a green gate gives back
 };

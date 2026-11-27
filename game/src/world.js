@@ -1,6 +1,9 @@
-// World building: seeded terrain with a carved valley, river, trees, clouds, runway and rings.
+// World building: a golden-hour canyon — steep strata walls framing a sandy
+// floor with a river, a dirt road, scrub, villages, drifting clouds, a runway
+// and glowing ring gates. The course is the canyon floor; the walls are the frame.
 import * as THREE from 'three';
-import { COURSE, SEED } from './config.js';
+import { COURSE, SEED, SCORE } from './config.js';
+import { FUEL_RING_WAYPOINTS } from './missions.js';
 import { makeNoise2D, mulberry32, clamp, lerp, smoothstep } from './random.js';
 
 const SIZE = 2400; // terrain spans -1200..1200 in x and z
@@ -14,9 +17,24 @@ function distToSegment(px, pz, ax, az, bx, bz) {
   return Math.hypot(px - cx, pz - cz);
 }
 
-export function makeWorld(palette) {
+// Soft radial glow texture, shared by the sun, the rings and the fuel gates.
+function makeGlowTexture() {
+  const cv = document.createElement('canvas');
+  cv.width = 128; cv.height = 128;
+  const ctx = cv.getContext('2d');
+  const g = ctx.createRadialGradient(64, 64, 2, 64, 64, 64);
+  g.addColorStop(0, 'rgba(255,255,255,1)');
+  g.addColorStop(0.35, 'rgba(255,255,255,0.55)');
+  g.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = g;
+  ctx.fillRect(0, 0, 128, 128);
+  return new THREE.CanvasTexture(cv);
+}
+
+export function buildCanyonWorld(palette) {
   const noise = makeNoise2D(SEED);
   const pts = COURSE.points;
+  const glowTex = makeGlowTexture();
 
   function distToCourse(x, z) {
     let d = Infinity;
@@ -27,11 +45,12 @@ export function makeWorld(palette) {
   }
 
   function heightAt(x, z) {
-    const mountains = noise(x * 0.0016, z * 0.0016) * 85 + noise(x * 0.006, z * 0.006) * 16;
-    const base = 28 + mountains;
+    // Gentle canyon floor, then walls that climb steeply past 130 m from the
+    // course and crest into a rim — the walls tower over the flight path.
+    const floor = 26 + noise(x * 0.0016, z * 0.0016) * 26 + noise(x * 0.006, z * 0.006) * 8;
     const d = distToCourse(x, z);
-    const carve = (1 - smoothstep(0, 300, d)) * 62;
-    let h = base - carve;
+    const wall = smoothstep(130, 430, d) * (150 + noise(x * 0.002 + 7, z * 0.002 + 7) * 70);
+    let h = floor + wall;
     // Flatten the runway bowl near the start.
     const r = Math.hypot(x - pts[0][0], z - pts[0][1]);
     h = lerp(6, h, smoothstep(30, 130, r));
@@ -43,39 +62,79 @@ export function makeWorld(palette) {
     return Math.atan2(b[0] - a[0], b[1] - a[1]); // heading where 0 = +z (south)
   }
 
-  // --- terrain mesh with vertex colours ---
+  // --- sky dome: amber horizon rising to deep indigo, so the sky is a gradient ---
+  const skyGeo = new THREE.SphereGeometry(1800, 24, 12);
+  const skyPos = skyGeo.attributes.position;
+  const skyColors = new Float32Array(skyPos.count * 3);
+  const cZenith = new THREE.Color(palette.skyZenith);
+  const cMid = new THREE.Color(palette.skyMid);
+  const cHorizon = new THREE.Color(palette.skyHorizon);
+  const tmp = new THREE.Color();
+  function paintSky(p) {
+    for (let i = 0; i < skyPos.count; i++) {
+      const y = skyPos.getY(i) / 1800; // -1..1
+      if (y >= 0.25) tmp.copy(cMid).lerp(cZenith, (y - 0.25) / 0.75);
+      else if (y >= 0) tmp.copy(cHorizon).lerp(cMid, y / 0.25);
+      else tmp.copy(cHorizon);
+      skyColors[i * 3] = tmp.r; skyColors[i * 3 + 1] = tmp.g; skyColors[i * 3 + 2] = tmp.b;
+    }
+    skyGeo.setAttribute('color', new THREE.BufferAttribute(skyColors, 3));
+  }
+  paintSky(palette);
+  const sky = new THREE.Mesh(skyGeo, new THREE.MeshBasicMaterial({
+    vertexColors: true, side: THREE.BackSide, fog: false,
+  }));
+  sky.name = 'skyDome';
+
+  // --- low sun: a bright disc with a wide glow, parked ahead-left of the course ---
+  const sunGroup = new THREE.Group();
+  sunGroup.name = 'lowSun';
+  const sunDisc = new THREE.Mesh(
+    new THREE.CircleGeometry(70, 32),
+    new THREE.MeshBasicMaterial({ color: palette.sunDisc, fog: false }),
+  );
+  const sunGlow = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: glowTex, color: palette.sunGlow, transparent: true, opacity: 0.7,
+    blending: THREE.AdditiveBlending, depthWrite: false, fog: false,
+  }));
+  sunGlow.scale.set(620, 620, 1);
+  sunGroup.add(sunDisc, sunGlow);
+  // South-west, high over the rim, so the disc clears the canyon wall and
+  // sits in the hero frame instead of hiding behind the ridge.
+  sunGroup.position.set(-1000, 560, 900);
+  sunGroup.lookAt(0, 60, 0);
+
+  // --- terrain mesh with vertex colours: strata bands on the walls ---
   const geo = new THREE.PlaneGeometry(SIZE, SIZE, 150, 150);
   geo.rotateX(-Math.PI / 2);
   const pos = geo.attributes.position;
   const colors = new Float32Array(pos.count * 3);
-  const cValley = new THREE.Color(palette.valley);
-  const cSlope = new THREE.Color(palette.slope);
-  const cRock = new THREE.Color(palette.rock);
-  const cSnow = new THREE.Color(palette.snow);
-  const cFieldA = new THREE.Color(0x9aa84e); // sunlit rice plot
-  const cFieldB = new THREE.Color(0x6f8f3e); // shaded paddy
-  const cFieldC = new THREE.Color(0xb59a55); // dry stubble plot
-  const tmp = new THREE.Color();
+  const cFloor = new THREE.Color(palette.floor);
+  const cStrataA = new THREE.Color(palette.strataA);
+  const cStrataB = new THREE.Color(palette.strataB);
+  const cStrataC = new THREE.Color(palette.strataC);
+  const cRim = new THREE.Color(palette.rim);
+  const cScrubA = new THREE.Color(0x8a7a3a); // dry grass on the floor
+  const cScrubB = new THREE.Color(0x6a6a30);
   for (let i = 0; i < pos.count; i++) {
     const x = pos.getX(i), z = pos.getZ(i);
     const h = heightAt(x, z);
     pos.setY(i, h);
-    const v = noise(x * 0.02, z * 0.02) * 0.12;
-    if (h < 22) tmp.copy(cValley);
-    else if (h < 55) tmp.copy(cValley).lerp(cSlope, (h - 22) / 33);
-    else if (h < palette.snowLine) tmp.copy(cSlope).lerp(cRock, (h - 55) / (palette.snowLine - 55));
-    else tmp.copy(cSnow);
-    // Valley-floor patchwork: rice plots read as a quilt of greens and gold
-    // from the air, so the foreground is never one flat green.
-    if (h < 30) {
+    const v = noise(x * 0.02, z * 0.02) * 0.1;
+    if (h < 34) {
+      tmp.copy(cFloor);
+      // Dry scrub patches quilt the canyon floor so it is never one flat sand.
       const patch = noise(x * 0.008 + 40, z * 0.008 + 40);
-      if (patch > 0.28) tmp.lerp(cFieldA, 0.55);
-      else if (patch > 0.05) tmp.lerp(cFieldB, 0.4);
-      else if (patch < -0.32) tmp.lerp(cFieldC, 0.45);
+      if (patch > 0.25) tmp.lerp(cScrubA, 0.5);
+      else if (patch < -0.3) tmp.lerp(cScrubB, 0.45);
+    } else if (h < 150) {
+      // Horizontal strata: the band a point falls in is set by its height
+      // wobbled by noise, so the walls read as layered rock.
+      const band = Math.floor((h + noise(x * 0.01, z * 0.01) * 9) / 13) % 3;
+      tmp.copy(band === 0 ? cStrataA : band === 1 ? cStrataB : cStrataC);
+    } else {
+      tmp.copy(cStrataC).lerp(cRim, Math.min(1, (h - 150) / 60));
     }
-    // Rock strata break through on steep ground.
-    const steep = noise(x * 0.004 + 90, z * 0.004 + 90);
-    if (h >= 55 && h < palette.snowLine && steep > 0.3) tmp.lerp(cRock, 0.35);
     tmp.offsetHSL(0, 0, v);
     colors[i * 3] = tmp.r; colors[i * 3 + 1] = tmp.g; colors[i * 3 + 2] = tmp.b;
   }
@@ -84,7 +143,7 @@ export function makeWorld(palette) {
   const terrain = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, metalness: 0 }));
   terrain.name = 'terrain';
 
-  // --- river ribbon along the valley floor ---
+  // --- river ribbon along the canyon floor, catching the low sun ---
   const riverPts = [];
   for (let i = 0; i < pts.length; i++) {
     const [x, z] = pts[i];
@@ -104,19 +163,19 @@ export function makeWorld(palette) {
   riverGeo.setAttribute('position', new THREE.Float32BufferAttribute(rPos, 3));
   riverGeo.computeVertexNormals();
   const river = new THREE.Mesh(riverGeo, new THREE.MeshStandardMaterial({
-    color: palette.river, roughness: 0.25, metalness: 0.1, transparent: true, opacity: 0.9,
+    color: palette.river, roughness: 0.15, metalness: 0.35, transparent: true, opacity: 0.92,
   }));
   river.name = 'river';
 
-  // --- trees (instanced cones + trunks) ---
+  // --- junipers: dark, sparse, only on the canyon floor and low slopes ---
   const rand = mulberry32(SEED + 7);
   const treeSpots = [];
   let guard = 0;
-  while (treeSpots.length < 1100 && guard++ < 30000) {
+  while (treeSpots.length < 650 && guard++ < 30000) {
     const x = (rand() - 0.5) * 2250, z = (rand() - 0.5) * 2250;
-    if (distToCourse(x, z) < 26) continue; // trees crowd the course edges now
+    if (distToCourse(x, z) < 26) continue; // trees crowd the course edges
     const h = heightAt(x, z);
-    if (h < 9 || h > 92) continue;
+    if (h < 9 || h > 80) continue;
     treeSpots.push([x, h, z, 0.8 + rand() * 0.9]);
   }
   const coneGeo = new THREE.ConeGeometry(3.2, 11, 6);
@@ -134,10 +193,10 @@ export function makeWorld(palette) {
   });
   cones.name = 'trees'; trunks.name = 'treeTrunks';
 
-  // --- bushes crowding the course edges (foreground detail at low altitude) ---
+  // --- scrub bushes crowding the course edges (foreground detail at low altitude) ---
   const bushSpots = [];
   guard = 0;
-  while (bushSpots.length < 220 && guard++ < 8000) {
+  while (bushSpots.length < 160 && guard++ < 8000) {
     const x = (rand() - 0.5) * 2250, z = (rand() - 0.5) * 2250;
     const d = distToCourse(x, z);
     if (d < 14 || d > 90) continue;
@@ -154,14 +213,14 @@ export function makeWorld(palette) {
   });
   bushes.name = 'bushes';
 
-  // --- rice-field plots: flat quilt squares on the valley floor ---
+  // --- dry grass plots: flat quilt squares on the canyon floor ---
   const plotGeo = new THREE.PlaneGeometry(1, 1);
   plotGeo.rotateX(-Math.PI / 2);
   const plotMat = new THREE.MeshStandardMaterial({ roughness: 1 });
-  const plotColors = [0x8fae4e, 0xa8b45a, 0x7a9a44, 0xc2a95e, 0x5f8f3f];
+  const plotColors = [0x8a7a3a, 0xa8904a, 0x6a6a30, 0xb59a55, 0x7a6a35];
   const plotSpots = [];
   guard = 0;
-  while (plotSpots.length < 46 && guard++ < 8000) {
+  while (plotSpots.length < 40 && guard++ < 8000) {
     const x = (rand() - 0.5) * 2200, z = (rand() - 0.5) * 2200;
     const d = distToCourse(x, z);
     if (d < 30 || d > 170) continue;
@@ -178,9 +237,9 @@ export function makeWorld(palette) {
     plots.setColorAt(i, plotCol.setHex(col));
   });
   if (plots.instanceColor) plots.instanceColor.needsUpdate = true;
-  plots.name = 'ricePlots';
+  plots.name = 'grassPlots';
 
-  // --- dirt road ribbon along the valley, beside the river ---
+  // --- dirt road ribbon along the canyon floor, beside the river ---
   const roadPos = [];
   for (let i = 0; i < pts.length - 1; i++) {
     const [x1, z1] = pts[i];
@@ -214,7 +273,7 @@ export function makeWorld(palette) {
     rockSpots.push([x, h, z, 1 + rand() * 2.2]);
   }
   const rockGeo = new THREE.DodecahedronGeometry(1.6, 0);
-  const rockMat = new THREE.MeshStandardMaterial({ color: palette.rock, roughness: 1 });
+  const rockMat = new THREE.MeshStandardMaterial({ color: palette.strataC, roughness: 1 });
   const rocks = new THREE.InstancedMesh(rockGeo, rockMat, rockSpots.length);
   rockSpots.forEach(([x, h, z, sc], i) => {
     p.set(x, h + 0.4 * sc, z); s.set(sc, sc * 0.7, sc);
@@ -223,7 +282,7 @@ export function makeWorld(palette) {
   });
   rocks.name = 'boulders';
 
-  // --- villages: little houses with pitched roofs near the runway and course ---
+  // --- villages: little houses with pitched terracotta roofs near the course ---
   const village = new THREE.Group();
   village.name = 'village';
   const wallColors = [0xf2ead8, 0xe8d8b0, 0xffffff, 0xe8b48a];
@@ -254,11 +313,11 @@ export function makeWorld(palette) {
     }
   });
 
-  // --- clouds ---
+  // --- clouds, lit warm by the low sun (unlit material, so they stay warm) ---
   const clouds = new THREE.Group();
   clouds.name = 'clouds';
-  const cloudMat = new THREE.MeshStandardMaterial({ color: palette.cloud, roughness: 1, transparent: true, opacity: 0.92 });
-  for (let i = 0; i < 16; i++) {
+  const cloudMat = new THREE.MeshBasicMaterial({ color: palette.cloud, transparent: true, opacity: 0.85 });
+  for (let i = 0; i < 12; i++) {
     const g = new THREE.Group();
     const n = 3 + Math.floor(rand() * 3);
     for (let j = 0; j < n; j++) {
@@ -298,6 +357,8 @@ export function makeWorld(palette) {
   // A ring is a real gate: it only counts when the plane crosses its plane
   // inside the hoop (see main.js). Each ring stores its facing normal — the
   // direction of travel through it — so the crossing test is exact.
+  // Every ring also carries a soft glow sprite, so the gate reads as lit
+  // even when the contact sheet shrinks it.
   const rings = [];
   const ringGroup = new THREE.Group();
   ringGroup.name = 'rings';
@@ -307,13 +368,20 @@ export function makeWorld(palette) {
     const y = heightAt(x, z) + COURSE.ringHeight;
     const heading = courseHeadingAt(wi);
     const torus = new THREE.Mesh(
-      new THREE.TorusGeometry(COURSE.ringRadius, 0.9, 10, 40),
+      new THREE.TorusGeometry(COURSE.ringRadius, 1.1, 10, 40),
       new THREE.MeshStandardMaterial({ color: palette.ring, emissive: palette.ringEmissive, emissiveIntensity: 0.9, roughness: 0.4 }),
     );
     torus.position.set(x, y, z);
     torus.rotation.y = heading;
     torus.name = `ring${k + 1}`;
     ringGroup.add(torus);
+    const glow = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: glowTex, color: palette.ringEmissive, transparent: true, opacity: 0.3,
+      blending: THREE.AdditiveBlending, depthWrite: false,
+    }));
+    glow.scale.set(46, 46, 1);
+    glow.position.set(x, y, z);
+    ringGroup.add(glow);
     // number sprite above the ring
     const cv = document.createElement('canvas'); cv.width = 128; cv.height = 128;
     const ctx = cv.getContext('2d');
@@ -330,7 +398,36 @@ export function makeWorld(palette) {
       // Torus default normal is +Z; rotation.y = heading maps it to the
       // direction of travel, which is also the plane's forward at that point.
       normal: new THREE.Vector3(Math.sin(heading), 0, Math.cos(heading)),
-      mesh: torus, passed: false,
+      mesh: torus, glow, passed: false, prevSide: null,
+    });
+  });
+
+  // --- green fuel gates between the rings: the only refill on the course ---
+  const fuelRings = [];
+  const fuelGroup = new THREE.Group();
+  fuelGroup.name = 'fuelRings';
+  FUEL_RING_WAYPOINTS.forEach((wi) => {
+    const [x, z] = pts[wi];
+    const y = heightAt(x, z) + COURSE.ringHeight;
+    const heading = courseHeadingAt(wi);
+    const torus = new THREE.Mesh(
+      new THREE.TorusGeometry(COURSE.ringRadius, 0.9, 10, 40),
+      new THREE.MeshStandardMaterial({ color: palette.fuelRing, emissive: palette.fuelRingEmissive, emissiveIntensity: 0.8, roughness: 0.4 }),
+    );
+    torus.position.set(x, y, z);
+    torus.rotation.y = heading;
+    fuelGroup.add(torus);
+    const glow = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: glowTex, color: palette.fuelRingEmissive, transparent: true, opacity: 0.3,
+      blending: THREE.AdditiveBlending, depthWrite: false,
+    }));
+    glow.scale.set(40, 40, 1);
+    glow.position.set(x, y, z);
+    fuelGroup.add(glow);
+    fuelRings.push({
+      pos: new THREE.Vector3(x, y, z),
+      normal: new THREE.Vector3(Math.sin(heading), 0, Math.cos(heading)),
+      mesh: torus, glow, passed: false, prevSide: null,
     });
   });
 
@@ -347,7 +444,7 @@ export function makeWorld(palette) {
 
   // Restyle every ring around the active one: passed rings go green, the
   // active ring burns bright and carries the beacon, later rings stay dim.
-  // curPalette tracks day/dusk swaps so the restyle always uses the live palette.
+  // curPalette tracks golden/dusk swaps so the restyle always uses the live palette.
   let curPalette = palette;
   function setActiveRing(activeIdx) {
     rings.forEach((r, i) => {
@@ -355,14 +452,17 @@ export function makeWorld(palette) {
         r.mesh.material.color.setHex(0x37c978);
         r.mesh.material.emissive.setHex(0x1a7a45);
         r.mesh.material.emissiveIntensity = 0.7;
+        r.glow.material.opacity = 0.12;
       } else if (i === activeIdx) {
         r.mesh.material.color.setHex(curPalette.ring);
         r.mesh.material.emissive.setHex(curPalette.ringEmissive);
         r.mesh.material.emissiveIntensity = 1.4;
+        r.glow.material.opacity = 0.5;
       } else {
         r.mesh.material.color.setHex(curPalette.ring);
         r.mesh.material.emissive.setHex(curPalette.ringEmissive);
         r.mesh.material.emissiveIntensity = 0.35;
+        r.glow.material.opacity = 0.22;
       }
       r.mesh.scale.setScalar(1);
     });
@@ -377,11 +477,11 @@ export function makeWorld(palette) {
   setActiveRing(0);
 
   return {
-    heightAt, rings, distToCourse, setActiveRing,
+    heightAt, rings, fuelRings, distToCourse, setActiveRing,
     startPos: new THREE.Vector3(start[0], heightAt(start[0], start[1]) + 5.5, start[1]),
     startYaw: Math.PI - startHeading, // yaw where 0 = north (-z); course heads +z (south)
     addTo(scene) {
-      scene.add(terrain, river, road, cones, trunks, bushes, plots, rocks, village, clouds, runway, ringGroup);
+      scene.add(sky, sunGroup, terrain, river, road, cones, trunks, bushes, plots, rocks, village, clouds, runway, ringGroup, fuelGroup);
     },
     update(dt, t) {
       clouds.children.forEach((c, i) => {
@@ -390,24 +490,31 @@ export function makeWorld(palette) {
       });
       // Only the active (next) ring pulses, so the eye finds it at a glance.
       const active = rings.find((r) => !r.passed);
-      const pulse = 0.75 + Math.sin(t * 3) * 0.35;
       rings.forEach((r) => {
         if (r === active) {
           r.mesh.material.emissiveIntensity = 1.1 + Math.sin(t * 3) * 0.45;
           r.mesh.scale.setScalar(1 + Math.sin(t * 3) * 0.03);
+          r.glow.material.opacity = 0.4 + Math.sin(t * 3) * 0.15;
         } else if (!r.passed) {
           r.mesh.material.emissiveIntensity = 0.35;
         }
       });
+      fuelRings.forEach((r) => {
+        if (!r.passed) r.glow.material.opacity = 0.22 + Math.sin(t * 2.4) * 0.1;
+      });
       if (beacon.visible) beacon.material.opacity = 0.12 + Math.sin(t * 3) * 0.05;
     },
     setPalette(next) {
-      // Swap terrain colours cheaply by rebuilding only material colours used by dynamic parts.
+      // Swap the live palette: sky dome, sun, river, trees, rocks, clouds, rings.
       curPalette = next;
+      cZenith.setHex(next.skyZenith); cMid.setHex(next.skyMid); cHorizon.setHex(next.skyHorizon);
+      paintSky(next);
+      sunDisc.material.color.setHex(next.sunDisc);
+      sunGlow.material.color.setHex(next.sunGlow);
       river.material.color.setHex(next.river);
       coneMat.color.setHex(next.tree);
       bushMat.color.setHex(next.tree);
-      rockMat.color.setHex(next.rock);
+      rockMat.color.setHex(next.strataC);
       trunkMat.color.setHex(next.trunk);
       cloudMat.color.setHex(next.cloud);
       beacon.material.color.setHex(next.ring);
